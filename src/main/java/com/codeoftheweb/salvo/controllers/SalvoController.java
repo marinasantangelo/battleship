@@ -145,7 +145,8 @@ private PlayerRepository playerRepository;
 
 
 
-/*//join a game: hay que chequear que esté logueada la persona, el player no quiera unirse a un juego contra si mismo y que el juego no esté lleno (i.e ya hay dos jugadores)
+/*
+join a game: hay que chequear que esté logueada la persona, el player no quiera unirse a un juego contra si mismo y que el juego no esté lleno (i.e ya hay dos jugadores)
     @RequestMapping(path ="game_view/{gameId}/players") //path varialbe es un valor dinámico de la url
     public ResponseEntity<Map<String, Object>> joinGame(@PathVariable long gameId, Authentication authentication) {
         Game game = gameRepository.findById(gameId);
@@ -174,8 +175,7 @@ private PlayerRepository playerRepository;
         return responseEntity;
     }
 
-
-//añadir barcos
+añadir barcos
 @PostMapping(path ="games/{gamePlayerId}/ships")
 
 public ResponseEntity addShips(Authentication authentication, @PathVariable long gamePlayerId){
@@ -202,32 +202,50 @@ public ResponseEntity addShips(Authentication authentication, @PathVariable long
     }
 }
 
+*/
+
+//TAREA 3: ADD SHIPS
+
+    @RequestMapping(path ="/games/players/{gamePlayerId}/ships")
+    public ResponseEntity<Map<String, Object>> addShips(@PathVariable long gamePlayerId, Authentication authentication, @RequestBody List<Ship> shipsList) {
+        ResponseEntity<Map<String, Object>> responseEntity;
+
+        if(isGuest(authentication)){
+            responseEntity = new ResponseEntity<>(makeMap("error", "Not logged in."), HttpStatus.UNAUTHORIZED);
+        }
+
+        GamePlayer gamePlayer = gamePlayerRepository.findById(gamePlayerId);
+        if (gamePlayer == null) {
+            responseEntity = new ResponseEntity<>(makeMap("error","There's no gamePlayer with that id."), HttpStatus.UNAUTHORIZED);
+        }
+
+        Player currentPlayer = playerRepository.findByUsername(authentication.getName());
+        if(gamePlayer.getPlayer().getId() != currentPlayer.getId()) {
+            responseEntity = new ResponseEntity<>(makeMap("error","The current user is not the gamePlayer the ID references"), HttpStatus.UNAUTHORIZED);
+        }
+
+        if(gamePlayer.getShips().size() > 0){
+            responseEntity = new ResponseEntity<>(makeMap("error","There are already ships."), HttpStatus.FORBIDDEN);
+
+        }else if(shipsList.size() != 5){
+            responseEntity = new ResponseEntity<>(makeMap("error","You need to have 5 ships"),HttpStatus.FORBIDDEN);
+
+        }else{
+            shipsList.forEach(ship -> gamePlayer.addShip(ship));
+            gamePlayerRepository.save(gamePlayer);
+            responseEntity = new ResponseEntity<>(makeMap("success","Ships created!"),HttpStatus.CREATED);
+        }
+
+        return responseEntity;
+    }
 
 
 
-TAREA 4
 
 
 
 
-
-
-
-  */
-
-
-
-
-
-
-
-
-
-
-
-
-
-        private Map<String, Object> makeMap(String key, Object value){
+    private Map<String, Object> makeMap(String key, Object value){
         Map<String, Object> map = new HashMap<>();
         map.put(key,value);
         return map;
@@ -249,6 +267,38 @@ TAREA 4
             responseEntity = new ResponseEntity<>(makeMap("gpId", gamePlayer.getId()),HttpStatus.CREATED); //lo que nos pide la plataforma es que se le mande al front end el id de game layer para poder dirigir al usuario a su juego.  Manda un 201 (operación exitosa)
         }
         return responseEntity;
+    }
+
+
+    /*---------------------------SALVOES---------------------------------*/
+
+    @RequestMapping(path ="/games/players/{gamePlayerId}/salvoes")
+    public ResponseEntity<Object> addSalvoes(@PathVariable long gamePlayerId, Authentication authentication, @RequestBody List<String> shots) {
+        ResponseEntity<Object> responseEntity;
+
+        GamePlayer gamePlayer = gamePlayerRepository.findById(gamePlayerId); //yo sobreescribí el metodo findById() que te proporciona el JPA por el mío propio en mi gamePlayerRepo. Si no hubiera puesto ese método, ya existe un findById() que te retorna un true o false. Entonces esta línea de código sería GamePlayer gamePlayer = gamePlayerRepo.findById(gamePlayerId).orElse(null);
+        if (gamePlayer == null) {
+            responseEntity = new ResponseEntity<>(makeMap("error","There's no gamePlayer with that id."), HttpStatus.UNAUTHORIZED);
+        }
+
+        Player currentPlayer = playerRepository.findByUsername(authentication.getName());
+        if(gamePlayer.getPlayer().getId() != currentPlayer.getId()) {
+            responseEntity = new ResponseEntity<>(makeMap("error","The current user is not the gamePlayer the ID references"), HttpStatus.UNAUTHORIZED);
+        }
+        if(shots.size() > 5  )  {
+            responseEntity = new ResponseEntity<>(makeMap("error", "You cannot throw more than 5 paws"), HttpStatus.FORBIDDEN);
+        } else if(shots.size() == 0) {
+            responseEntity = new ResponseEntity<>(makeMap("error", "You have to throw at least one paw."), HttpStatus.FORBIDDEN);
+        } else{
+            int turn = gamePlayer.getSalvoes().size() +1;
+            Salvo newSalvo = new Salvo(shots, turn);
+
+            gamePlayer.addSalvo(newSalvo);
+            gamePlayerRepository.save(gamePlayer);
+            responseEntity = new ResponseEntity<>(makeMap("success", "Salvo created!"), HttpStatus.CREATED);
+        }
+        return responseEntity;
+
     }
 
 

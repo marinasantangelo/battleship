@@ -5,7 +5,10 @@ var app = new Vue({
     data: {
      usernameP1: "",
      usernameP2: "",
-     currentPlayer: ""
+     currentPlayer: "",
+      currentPlayerId: "",
+      ships: [],
+      dataSalvoes: []
 
     }
 
@@ -26,9 +29,18 @@ fetch("/api/game_view/"+ paramObj(location.search).gp, {mode:'no-cors'})
         document.getElementById('error').classList.remove('show')
         document.getElementById('app').style.display = 'block'
         gameView = json;
+        app.ships = json.ships;
         printPlayersUsername(); // calling the funtion that prints the game players username
-        loadGrid(); // loads grid when it loads the page
+
+        if(gameView.ships.length == 0){
+                    loadGrid(false); // loads grid. when there are still ships missing the grid is not static
+                }else{
+                    loadGrid(true); // loads grid. when there are no ships missing the grid is static
+                }
+
+
         salvoes();// loads salvoes when it loads the page
+        addSalvoes();
     }
     if(paramObj(location.search).join != undefined && paramObj(location.search).join == 'true'){
                 swal({text:"Hey " + app.currentPlayer + ", you've joined a new game. Have fun!", icon:"success", button: {text:"Thanks", className:"join-button"}})
@@ -63,18 +75,107 @@ fetch("/api/game_view/"+ paramObj(location.search).gp, {mode:'no-cors'})
 });*/
 
 
+
+
 // printing game players usernames depending on the id
 function printPlayersUsername(){
-    if(gameView.gamePlayers[0].id == paramObj(location.search).gp){
-        app.usernameP1 = gameView.gamePlayers[0].player.user;
-        app.currentPlayer = gameView.gamePlayers[0].player.id
-        app.usernameP2 = gameView.gamePlayers[1].player.user;
-    }else{
-        app.usernameP1 = gameView.gamePlayers[1].player.user;
-        app.usernameP2 = gameView.gamePlayers[0].player.user;
-        app.currentPlayer = gameView.gamePlayers[1].player.id
-    }
+if(gameView.gamePlayers.length > 1){
+   if(gameView.gamePlayers[0].id == paramObj(location.search).gp){
+           app.usernameP1 = gameView.gamePlayers[0].player.user;
+           app.currentPlayer = gameView.gamePlayers[0].player.id
+           app.usernameP2 = gameView.gamePlayers[1].player.user;
+       }else{
+           app.usernameP1 = gameView.gamePlayers[1].player.user;
+           app.usernameP2 = gameView.gamePlayers[0].player.user;
+           app.currentPlayer = gameView.gamePlayers[1].player.id
+       }
+}else{
+app.usernameP1 = gameView.gamePlayers[0].player.user;
+app.currentPlayer = gameView.gamePlayers[0].player.id
+app.usernameP2 = 'waiting your opponent'
+
 }
+
+}
+
+//------------ SALVOES ------------------
+
+// add salvoes function
+function addSalvoes(){
+
+    let salvoesCells = document.querySelectorAll(".grid-salvoes .grid-cell");
+
+    //add salvo's img when you click on one cell
+    for(i=0; i<salvoesCells.length; i++){
+        salvoesCells[i].addEventListener("click", function(){
+            addSalvoImg(event);
+        })
+    }
+    //adding and removing salvo's img
+    function addSalvoImg(evt){
+        let cell = evt.target;
+        if(cell.classList.contains("salvoes-img")){
+            cell.classList.remove('salvoes-img');
+        } else{
+            cell.classList.add('salvoes-img');
+        }
+    }
+
+ }
+
+ //adding the salvoes fetch(post)
+ function postSalvoes(){
+    app.dataSalvoes = []
+    let salvoesPaws = document.querySelectorAll(".grid-salvoes .grid-cell.salvoes-img");
+    //posting the salvos to the back-end
+    salvoesPaws.forEach(function(paw){
+        let y = paw.dataset.y; // letter
+        let x = +(paw.dataset.x); // number
+
+        let location = y+x;
+        app.dataSalvoes.push(location);
+    })
+
+    fetch("/api/games/players/" + paramObj(location.search).gp + "/salvoes",{
+        method:'POST',
+        body: JSON.stringify(app.dataSalvoes),
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(function(response) {
+        if(response.ok){
+            return response.json()
+        }else{
+            return Promise.reject(response.json())
+        }
+    })
+    .then(function(json) {
+        gameViewRefresh()
+        console.log(json)
+    })
+    .catch(function(error){
+        return error
+    }).then(function(jsonError){
+        if(jsonError != undefined){
+            console.log(jsonError)
+
+        }
+    })
+ }
+
+
+function gameViewRefresh(){
+    fetch("/api/game_view/"+ paramObj(location.search).gp, {mode:'no-cors'})
+    .then(function(response) {
+        return response.json()
+    })
+    .then(function(json){
+        gameView = json;
+    })
+    .then(function(){
+        salvoes()
+    })
+ }
+
 
 // function that makes the symbols compatible on the url
 function paramObj(search) {
@@ -91,7 +192,7 @@ function paramObj(search) {
 /*SHIPS GRID*/
 
 //main function that shoots the gridstack.js framework and load the grid with the ships
-const loadGrid = function () {
+const loadGrid = function (hasShips) {
     var options = {
         //10 x 10 grid
         width: 10,
@@ -108,7 +209,7 @@ const loadGrid = function () {
         //allows the widget to occupy more than one column
         disableOneColumnMode: true,
         //false allows widget dragging, true denies it
-        staticGrid: false,
+        staticGrid: hasShips,
         //activates animations
         animate: true
     }
@@ -119,35 +220,45 @@ const loadGrid = function () {
 
     grid = $('#grid').data('gridstack');
 
-    //adding the ships already created in the back-end
-    for(i=0;i<gameView.ships.length;i++){
-        let shipType = gameView.ships[i].type; //type
-        let x = +(gameView.ships[i].location[0].slice(1)) - 1; //number
-        let y = gameView.ships[i].location[0].slice(0,1).toUpperCase().charCodeAt(0)-65; //letter
-        let w; //width
-        let h; //height
+   //adding the ships
+       if(hasShips){
+           for(i=0;i<gameView.ships.length;i++){
+               let shipType = gameView.ships[i].type; //type
+               let x = +(gameView.ships[i].location[0].slice(1)) - 1; //number
+               let y = gameView.ships[i].location[0].slice(0,1).toUpperCase().charCodeAt(0)-65; //letter
+               let w; //width
+               let h; //height
 
-        if(gameView.ships[i].location[0].slice(0,1) == gameView.ships[i].location[1].slice(0,1)){
-            w = gameView.ships[i].location.length;
-            h = 1;
-            grid.addWidget($('<div id="'+shipType+'"><div class="grid-stack-item-content '+shipType+'Horizontal"></div><div/>'), x, y, w, h);
-            //check that the shipType is written in camel case in the back-end Salvo Application
-        } else{
-            h = gameView.ships[i].location.length;
-            w = 1;
-            grid.addWidget($('<div id="'+shipType+'"><div class="grid-stack-item-content '+shipType+'Vertical"></div><div/>'), x, y, w, h);
-            //check that the shipType is written in camel case in the back-end Salvo Application
-        }
-    }
+               if(gameView.ships[i].location[0].slice(0,1) == gameView.ships[i].location[1].slice(0,1)){
+                   w = gameView.ships[i].location.length;
+                   h = 1;
+                   grid.addWidget($('<div id="'+shipType+'"><div class="grid-stack-item-content '+shipType+'Horizontal"></div><div/>'), x, y, w, h);
+                   //check that the shipType is written in camel case in the back-end Salvo Application
+               } else{
+                   h = gameView.ships[i].location.length;
+                   w = 1;
+                   grid.addWidget($('<div id="'+shipType+'"><div class="grid-stack-item-content '+shipType+'Vertical"></div><div/>'), x, y, w, h);
+                   //check that the shipType is written in camel case in the back-end Salvo Application
+               }
+           }
+       } else{
+           grid.addWidget($('<div id="carrier"><div class="grid-stack-item-content carrierHorizontal"></div><div/>'), 0, 0, 5, 1);
+           grid.addWidget($('<div id="battleship"><div class="grid-stack-item-content battleshipHorizontal"></div><div/>'), 0, 1, 4, 1);
+           grid.addWidget($('<div id="submarine"><div class="grid-stack-item-content submarineHorizontal"></div><div/>'), 0, 2, 3, 1);
+           grid.addWidget($('<div id="destroyer"><div class="grid-stack-item-content destroyerHorizontal"></div><div/>'), 0, 3, 3, 1);
+           grid.addWidget($('<div id="patrolBoat"><div class="grid-stack-item-content patrolBoatHorizontal"></div><div/>'), 0, 4, 2, 1);
+       }
 
 
     createGrid(11, $(".grid-ships"), 'ships')
 
+    if(!hasShips){
     rotateShips("carrier", 5)
     rotateShips("battleship", 4)
     rotateShips("submarine",3)
     rotateShips("destroyer", 3)
     rotateShips("patrolBoat",2)
+}
 
     listenBusyCells('ships')
     $('.grid-stack').on('change', function(){listenBusyCells('ships')})
@@ -193,6 +304,54 @@ const createGrid = function(size, element, id){
 
     element.append(wrapper)
 }
+
+
+// add ships function that contains the fetch(post)
+function addShips(){
+let dataShips = []
+let shipsList = document.querySelectorAll(".grid-stack-item");
+
+shipsList.forEach(function(ship){
+    let x = +(ship.dataset.gsX);
+    let y = +(ship.dataset.gsY);
+    let w = +(ship.dataset.gsWidth);
+    let h = +(ship.dataset.gsHeight);
+    let obj={};
+    let locs = []
+    let type = ship.id;
+
+    if(h>w){
+        for(i=0; i< h; i++){
+            locs.push(String.fromCharCode(65+y+i)+(x+1))
+        }
+    }else{
+        for(i=0; i< w; i++){
+            locs.push(String.fromCharCode(65+y)+(x+1+i))
+        }
+    }
+
+    obj.locations = locs;
+    obj.shipType = type;
+
+    dataShips.push(obj)
+})
+//adding the ships fetch (post)
+ fetch("/api/games/players/" + paramObj(location.search).gp + "/ships",{
+        method:'POST',
+        body: JSON.stringify(dataShips),
+        headers: {'Content-Type': 'application/json'}
+
+    })
+    .then(function(response) {
+        return response.json()
+    }).then(function(json) {
+        console.log(json)
+        window.location.replace("game.html?gp="+paramObj(location.search).gp+"&newgame=false&join=false&newships=true")
+    }).catch(function(error){
+        console.log(error)
+    })
+}
+
 
 //adds a listener to the ships, wich shoots its rotation when clicked
 const rotateShips = function(shipType, cells){
